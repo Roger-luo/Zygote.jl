@@ -162,8 +162,6 @@ function unzip(tuples)
   end
 end
 @adjoint function map(f, args...)
-  println(typeof(f))
-  println(args)
   ys_and_backs = map((args...) -> _forward(__context__, f, args...), args...)
   ys, backs = unzip(ys_and_backs)
   ys, function (Δ)
