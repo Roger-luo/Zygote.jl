@@ -26,15 +26,7 @@ end
 
 # Wrappers
 
-_pullback(f, args...) = _pullback(Context(), f, args...)
-
-tailmemaybe(::Nothing) = nothing
-tailmemaybe(x::Tuple) = Base.tail(x)
-
-function pullback(f, args...)
-  y, back = _pullback(f, args...)
-  y, Δ -> tailmemaybe(back(Δ))
-end
+pullback(f, args...) = _pullback(Context(), f, args...)
 
 sensitivity(y::Number) = one(y)
 sensitivity(y::Complex) = error("Output is complex, so the gradient is not defined.")
@@ -46,69 +38,6 @@ function gradient(f, args...)
 end
 
 Base.adjoint(f::Function) = x -> gradient(f, x)[1]
-
-# Param-style wrappers
-
-# TODO store ids only
-struct Params
-  order::Buffer{Any, Vector{Any}}
-  params::IdSet{Any}
-  Params() = new(Buffer([], false), IdSet())
-end
-
-@forward Params.order Base.iterate, Base.length
-
-function Base.push!(ps::Params, x)
-  if !(x in ps.params)
-    push!(ps.order, x)
-    push!(ps.params, x)
-  end
-  return ps
-end
-
-Base.push!(ps::Params, x...) = (foreach(x -> push!(ps, x), x); ps)
-
-function Base.delete!(ps::Params, x)
-  if x in ps.params
-    delete!(ps.params, x)
-    i = findfirst(y -> y === x, ps.order)
-    deleteat!(ps.order, i)
-  end
-  return ps
-end
-
-Params(xs) = push!(Params(), xs...)
-
-function Base.show(io::IO, ps::Params)
-  print(io, "Params([")
-  join(io, ps.order, ", ")
-  print(io, "])")
-end
-
-struct Grads
-  grads::IdDict{Any,Any}
-end
-
-Base.show(io::IO, ps::Grads) = print(io, "Grads(...)")
-
-@forward Grads.grads Base.getindex, Base.haskey
-
-function Base.getindex(gs::Grads, x)
-  isbits(x) && error("Only reference types can be differentiated with `Params`.")
-  return gs.grads[x]
-end
-
-function pullback(f, ps::Params)
-  cx = Context()
-  y, back = _pullback(cx, f)
-  y, function (Δ)
-    for p in ps
-      cache(cx)[p] = nothing
-    end
-    back(Δ)
-    Grads(cx.cache) # TODO make a copy
-  end
-end
 
 # Code Reflection
 

@@ -45,14 +45,6 @@ end
 # likely possible for gradients to be accumulated as params or globals and
 # backpropagated as values; these should be mutually exclusive options.
 
-@generated function accum_param(cx::Context, x, Δ)
-  isbitstype(x) && return
-  quote
-    haskey(cache(cx), x) && (cache(cx)[x] = accum(cache(cx)[x],Δ))
-    return
-  end
-end
-
 function accum_global(cx::Context, ref, x̄)
   (x̄ == nothing || isconst(ref.mod, ref.name)) && return
   gs = cache(cx)
@@ -62,13 +54,12 @@ end
 
 unwrap(x) = x
 
-@adjoint unwrap(x) = unwrap(x), x̄ -> (accum_param(__context__, x, x̄); (x̄,))
+@adjoint unwrap(x) = unwrap(x), x̄ -> (x̄,)
 
 unwrap(ref, x) = x
 
 @adjoint unwrap(ref, x) = unwrap(x), function (x̄)
   accum_global(__context__, ref, x̄)
-  accum_param(__context__, x, x̄)
 end
 
 function global_set(ref, val)
@@ -191,7 +182,6 @@ end
 @adjoint function literal_getproperty(x, ::Val{f}) where f
   val = getproperty(x, f)
   function back(Δ)
-    accum_param(__context__, val, Δ)
     if isimmutable(x)
       ((;nt_nothing(x)...,pair(Val(f), Δ)...), nothing)
     else
